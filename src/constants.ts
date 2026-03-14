@@ -1,19 +1,16 @@
 export const GAME_WIDTH = 800;
 export const GAME_HEIGHT = 600;
 
-export const WINNING_SCORE = 5000; // Final goal
+export const WINNING_SCORE = 2000; // Increased for more fun
 export const POINTS_PER_KILL = 20;
 
-export const LEVELS = [
-  { number: 1, targetScore: 600, rocketSpeedMin: 0.4, rocketSpeedMax: 1.0, spawnRate: 0.012 },
-  { number: 2, targetScore: 1500, rocketSpeedMin: 0.7, rocketSpeedMax: 1.5, spawnRate: 0.018 },
-  { number: 3, targetScore: 3000, rocketSpeedMin: 1.0, rocketSpeedMax: 2.2, spawnRate: 0.025 },
-  { number: 4, targetScore: 5000, rocketSpeedMin: 1.4, rocketSpeedMax: 3.0, spawnRate: 0.035 },
-];
+export const ROCKET_SPEED_MIN = 0.6;
+export const ROCKET_SPEED_MAX = 1.8;
+export const ROCKET_SPAWN_RATE = 0.02; 
 
 export const INTERCEPTOR_SPEED = 7;
 export const EXPLOSION_MAX_RADIUS = 45;
-export const EXPLOSION_SPEED = 0.015;
+export const EXPLOSION_SPEED = 0.015; 
 
 export const COLORS = {
   bg: '#FFF9F2', // Warm paper color
@@ -46,28 +43,22 @@ export const TRANSLATIONS = {
     lose: 'Boredom Won...',
     score: 'Inspiration',
     ammo: 'Notes',
-    target: 'Target: 5000',
+    target: 'Target: 2000',
     instructions: 'Tap to launch Musical Notes! Protect the Art Studios from the Grey Boredom!',
     combo: 'COMBO!',
     perfect: 'PERFECT HARMONY!',
-    level: 'Level',
-    nextLevel: 'Next Masterpiece',
-    levelComplete: 'Level Complete!',
   },
   zh: {
     title: '音乐绘画大作战',
     start: '开始创作！',
     restart: '再画一次',
     win: '完美杰作！',
-    lose: '被无聊吞噬了...',
+    lose: '灵感蓄力完毕，下局超神',
     score: '灵感值',
     ammo: '音符',
-    target: '目标: 5000',
+    target: '目标: 2000',
     instructions: '点击发射音符！保护艺术工作室不被灰色无聊墨滴破坏！',
     combo: '连击！',
     perfect: '完美和弦！',
-    level: '关卡',
-    nextLevel: '下一幅杰作',
-    levelComplete: '关卡完成！',
   },
 };

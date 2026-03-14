@@ -6,7 +6,9 @@ import {
   GAME_HEIGHT, 
   WINNING_SCORE, 
   POINTS_PER_KILL, 
-  LEVELS,
+  ROCKET_SPEED_MIN, 
+  ROCKET_SPEED_MAX, 
+  ROCKET_SPAWN_RATE, 
   INTERCEPTOR_SPEED, 
   EXPLOSION_MAX_RADIUS, 
   EXPLOSION_SPEED, 
@@ -22,10 +24,8 @@ import {
   Battery, 
   City, 
   GameStatus, 
-  Language,
-  LevelConfig
+  Language 
 } from './types';
-import { soundManager } from './soundManager';
 
 interface FloatingText {
   id: string;
@@ -40,7 +40,6 @@ export default function App() {
   const [status, setStatus] = useState<GameStatus>('START');
   const [score, setScore] = useState(0);
   const [lang, setLang] = useState<Language>('zh');
-  const [currentLevel, setCurrentLevel] = useState(0);
   const [batteries, setBatteries] = useState<Battery[]>(
     BATTERY_CONFIGS.map(b => ({ ...b, ammo: b.maxAmmo, destroyed: false }))
   );
@@ -60,30 +59,17 @@ export default function App() {
 
   const t = TRANSLATIONS[lang];
 
-  const initGame = useCallback((levelIndex: number = 0) => {
-    if (levelIndex === 0) {
-      setScore(0);
-      scoreRef.current = 0;
-      setCities(CITY_CONFIGS.map(c => ({ ...c, destroyed: false })));
-    }
-    setCurrentLevel(levelIndex);
+  const initGame = useCallback(() => {
+    setScore(0);
+    scoreRef.current = 0;
     setBatteries(BATTERY_CONFIGS.map(b => ({ ...b, ammo: b.maxAmmo, destroyed: false })));
+    setCities(CITY_CONFIGS.map(c => ({ ...c, destroyed: false })));
     rocketsRef.current = [];
     interceptorsRef.current = [];
     explosionsRef.current = [];
     floatingTextsRef.current = [];
     setStatus('PLAYING');
-    soundManager.startMusic();
   }, []);
-
-  const nextLevel = () => {
-    if (currentLevel < LEVELS.length - 1) {
-      initGame(currentLevel + 1);
-      soundManager.playLevelUp();
-    } else {
-      setStatus('WON');
-    }
-  };
 
   const handleCanvasClick = (e: React.MouseEvent | React.TouchEvent) => {
     if (status !== 'PLAYING') return;
@@ -128,7 +114,6 @@ export default function App() {
         pb.id === b.id ? { ...pb, ammo: pb.ammo - 1 } : pb
       ));
 
-      soundManager.playLaunch();
       interceptorsRef.current.push({
         id: Math.random().toString(36).substr(2, 9),
         startX: b.x,
@@ -146,11 +131,10 @@ export default function App() {
   const update = useCallback(() => {
     if (status !== 'PLAYING') return;
 
-    const level = LEVELS[currentLevel];
     if (shakeRef.current > 0) shakeRef.current -= 0.5;
 
     // 1. Spawn Boredom Blobs (Enemies)
-    if (Math.random() < level.spawnRate) {
+    if (Math.random() < ROCKET_SPAWN_RATE) {
       const startX = Math.random() * GAME_WIDTH;
       const targets = [
         ...cities.filter(c => !c.destroyed).map(c => ({ x: c.x, y: c.y })),
@@ -159,16 +143,15 @@ export default function App() {
       
       if (targets.length > 0) {
         const target = targets[Math.floor(Math.random() * targets.length)];
-        const types: ('monster' | 'eraser' | 'cloud' | 'clock')[] = ['monster', 'eraser', 'cloud', 'clock'];
         rocketsRef.current.push({
           id: Math.random().toString(36).substr(2, 9),
           x: startX,
           y: 0,
           targetX: target.x,
           targetY: target.y,
-          speed: level.rocketSpeedMin + Math.random() * (level.rocketSpeedMax - level.rocketSpeedMin),
+          speed: ROCKET_SPEED_MIN + Math.random() * (ROCKET_SPEED_MAX - ROCKET_SPEED_MIN),
           progress: 0,
-          type: types[Math.floor(Math.random() * types.length)]
+          variation: Math.floor(Math.random() * 3)
         });
       }
     }
@@ -269,7 +252,6 @@ export default function App() {
               life: 1,
               color: e.color
             });
-            soundManager.playSplat();
             rocketsRef.current.splice(rIndex, 1);
           }
         });
@@ -295,19 +277,13 @@ export default function App() {
       if (ft.life <= 0) floatingTextsRef.current.splice(index, 1);
     });
 
-    if (scoreRef.current >= level.targetScore) {
-      if (currentLevel < LEVELS.length - 1) {
-        setStatus('LEVEL_UP');
-      } else {
-        setStatus('WON');
-      }
-      soundManager.stopMusic();
+    if (scoreRef.current >= WINNING_SCORE) {
+      setStatus('WON');
     } else if (batteries.every(b => b.destroyed)) {
       setStatus('LOST');
-      soundManager.stopMusic();
     }
 
-  }, [status, batteries, cities, t.combo, t.perfect, currentLevel, initGame]);
+  }, [status, batteries, cities, t.combo, t.perfect]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -396,105 +372,69 @@ export default function App() {
       ctx.save();
       ctx.translate(r.x, r.y);
       
-      // Wobbly rotation based on position
-      ctx.rotate(Math.sin(r.y * 0.1) * 0.1);
+      // Rotate slightly based on movement
+      const angle = Math.atan2(r.targetY - r.y, r.targetX - r.x);
+      ctx.rotate(angle + Math.PI / 2);
 
-      if (r.type === 'monster') {
-        // Body - Larger and more interesting shape
-        ctx.fillStyle = COLORS.enemy;
-        ctx.beginPath();
-        ctx.moveTo(-15, 0);
-        ctx.bezierCurveTo(-15, -20, 15, -20, 15, 0);
-        ctx.bezierCurveTo(15, 15, -15, 15, -15, 0);
-        ctx.fill();
+      ctx.fillStyle = COLORS.enemy;
+      ctx.strokeStyle = COLORS.ink;
+      ctx.lineWidth = 2;
 
-        // Big Silly Eyes
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(-5, -5, 5, 0, Math.PI * 2);
-        ctx.arc(6, -4, 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(-4, -3, 2, 0, Math.PI * 2);
-        ctx.arc(7, -2, 1.5, 0, Math.PI * 2);
-        ctx.fill();
+      const size = 20; // Larger size
 
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1;
+      if (r.variation === 0) {
+        // Grumpy Cloud
         ctx.beginPath();
-        ctx.moveTo(-5, 5);
-        ctx.quadraticCurveTo(0, 2, 5, 5);
-        ctx.stroke();
-      } else if (r.type === 'eraser') {
-        // Giant Eraser
-        ctx.fillStyle = '#FFB7C5'; // Pink eraser
-        ctx.strokeStyle = COLORS.ink;
-        ctx.lineWidth = 2;
-        ctx.fillRect(-20, -10, 40, 20);
-        ctx.strokeRect(-20, -10, 40, 20);
-        // Eraser smudge
-        ctx.fillStyle = '#D3D3D3';
-        ctx.fillRect(10, -10, 10, 20);
-        // Grumpy face on eraser
-        ctx.fillStyle = COLORS.ink;
-        ctx.fillRect(-10, -5, 4, 2);
-        ctx.fillRect(2, -5, 4, 2);
-        ctx.beginPath();
-        ctx.moveTo(-5, 5);
-        ctx.lineTo(5, 5);
-        ctx.stroke();
-      } else if (r.type === 'cloud') {
-        // Grumpy Rain Cloud
-        ctx.fillStyle = '#A9A9A9';
-        ctx.beginPath();
-        ctx.arc(-10, 0, 12, 0, Math.PI * 2);
-        ctx.arc(10, 0, 12, 0, Math.PI * 2);
-        ctx.arc(0, -10, 15, 0, Math.PI * 2);
-        ctx.fill();
-        // Eyes
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(-5, -2, 3, 0, Math.PI * 2);
-        ctx.arc(5, -2, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(-5, -2, 1.5, 0, Math.PI * 2);
-        ctx.arc(5, -2, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (r.type === 'clock') {
-        // Snoozing Alarm Clock
-        ctx.fillStyle = '#5F9EA0';
-        ctx.beginPath();
-        ctx.arc(0, 0, 15, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = COLORS.ink;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        // Bells
-        ctx.beginPath();
-        ctx.arc(-12, -12, 6, 0, Math.PI * 2);
-        ctx.arc(12, -12, 6, 0, Math.PI * 2);
+        ctx.arc(-size/2, 0, size/2, 0, Math.PI * 2);
+        ctx.arc(size/2, 0, size/2, 0, Math.PI * 2);
+        ctx.arc(0, -size/2, size/2, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        // ZZZs
-        ctx.fillStyle = COLORS.ink;
-        ctx.font = '12px Arial';
-        ctx.fillText('z', 15, -15);
-        ctx.fillText('Z', 22, -22);
+      } else if (r.variation === 1) {
+        // Sleepy Rock
+        ctx.beginPath();
+        ctx.moveTo(-size, size/2);
+        ctx.lineTo(size, size/2);
+        ctx.lineTo(size * 0.8, -size);
+        ctx.lineTo(-size * 0.8, -size);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Boring Square
+        ctx.fillRect(-size/2, -size/2, size, size);
+        ctx.strokeRect(-size/2, -size/2, size, size);
       }
+
+      // Eyes for all monsters
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(-size/4, -size/4, 4, 0, Math.PI * 2);
+      ctx.arc(size/4, -size/4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = 'black';
+      ctx.beginPath();
+      ctx.arc(-size/4, -size/4, 2, 0, Math.PI * 2);
+      ctx.arc(size/4, -size/4, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Grumpy mouth
+      ctx.strokeStyle = 'black';
+      ctx.beginPath();
+      ctx.moveTo(-size/4, size/4);
+      ctx.lineTo(size/4, size/4);
+      ctx.stroke();
 
       ctx.restore();
 
-      // Trail
+      // Tail
       ctx.strokeStyle = COLORS.enemy;
-      ctx.globalAlpha = 0.2;
+      ctx.globalAlpha = 0.3;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
       ctx.moveTo(r.x, r.y);
-      ctx.lineTo(r.x - (r.targetX - r.x) * 0.1, r.y - (r.targetY - r.y) * 0.1);
+      ctx.lineTo(r.x - (r.targetX - r.x) * 0.05, r.y - (r.targetY - r.y) * 0.05);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1.0;
@@ -582,7 +522,7 @@ export default function App() {
               {t.title}
             </h1>
             <div className="flex items-center gap-2 text-[10px] font-bold text-[#4A4A4A]/40 uppercase tracking-widest">
-              <Music2 className="w-3 h-3" /> {t.level} {LEVELS[currentLevel].number}
+              <Music2 className="w-3 h-3" /> ART & MUSIC DEFENSE
             </div>
           </div>
         </div>
@@ -664,30 +604,6 @@ export default function App() {
             </motion.div>
           )}
 
-          {status === 'LEVEL_UP' && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="absolute inset-0 bg-[#4ECDC4]/30 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center"
-            >
-              <motion.div
-                initial={{ scale: 0.8, rotate: 2 }}
-                animate={{ scale: 1, rotate: 0 }}
-                className="bg-white p-12 rounded-[3rem] border-4 border-[#4A4A4A] shadow-[12px_12px_0px_0px_rgba(74,74,74,1)]"
-              >
-                <Sparkles className="w-24 h-24 text-[#FFE66D] mx-auto mb-6" />
-                <h2 className="text-5xl font-black mb-2 text-[#4A4A4A] tracking-tight uppercase">{t.levelComplete}</h2>
-                <p className="text-[#4A4A4A]/60 mb-8 font-black text-2xl">{t.level} {LEVELS[currentLevel].number}</p>
-                <button 
-                  onClick={nextLevel}
-                  className="px-16 py-5 bg-[#4ECDC4] hover:bg-[#3dbdb3] text-white text-2xl font-black rounded-3xl transition-all transform hover:scale-105 active:scale-95 shadow-[0px_6px_0px_0px_rgba(50,150,140,1)]"
-                >
-                  {t.nextLevel}
-                </button>
-              </motion.div>
-            </motion.div>
-          )}
-
           {status === 'WON' && (
             <motion.div 
               initial={{ opacity: 0 }}
@@ -703,7 +619,7 @@ export default function App() {
                 <h2 className="text-5xl font-black mb-2 text-[#4A4A4A] tracking-tight uppercase">{t.win}</h2>
                 <p className="text-[#4A4A4A]/60 mb-8 font-black text-2xl">{t.score}: {score}</p>
                 <button 
-                  onClick={() => initGame(0)}
+                  onClick={initGame}
                   className="px-16 py-5 bg-[#4ECDC4] hover:bg-[#3dbdb3] text-white text-2xl font-black rounded-3xl transition-all transform hover:scale-105 active:scale-95 shadow-[0px_6px_0px_0px_rgba(50,150,140,1)]"
                 >
                   {t.restart}
@@ -727,7 +643,7 @@ export default function App() {
                 <h2 className="text-5xl font-black mb-2 text-[#4A4A4A] tracking-tight uppercase">{t.lose}</h2>
                 <p className="text-[#4A4A4A]/60 mb-8 font-black text-2xl">{t.score}: {score}</p>
                 <button 
-                  onClick={() => initGame(0)}
+                  onClick={initGame}
                   className="px-16 py-5 bg-[#FF6B6B] hover:bg-[#ff5252] text-white text-2xl font-black rounded-3xl transition-all transform hover:scale-105 active:scale-95 shadow-[0px_6px_0px_0px_rgba(200,50,50,1)]"
                 >
                   {t.restart}
@@ -741,8 +657,8 @@ export default function App() {
       {/* Footer Info */}
       <div className="w-full max-w-[800px] mt-8 flex justify-between items-center text-[10px] font-black uppercase tracking-[0.3em] text-[#4A4A4A]/20">
         <div className="flex gap-6">
-          <span className="flex items-center gap-2"><Trophy className="w-4 h-4" /> {t.level} {LEVELS[currentLevel].number} / {LEVELS.length}</span>
-          <span>{t.target}: {LEVELS[currentLevel].targetScore}</span>
+          <span className="flex items-center gap-2"><Trophy className="w-4 h-4" /> {t.target}</span>
+          <span>CREATIVITY MODE: ON</span>
         </div>
         <div>MADE WITH ❤️ FOR LITTLE ARTISTS</div>
       </div>

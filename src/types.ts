@@ -11,7 +11,7 @@ export interface Rocket extends Entity {
   targetY: number;
   speed: number;
   progress: number; // 0 to 1
-  type: 'monster' | 'eraser' | 'cloud' | 'clock';
+  variation: number;
 }
 
 export interface Interceptor extends Entity {
@@ -46,14 +46,6 @@ export interface City {
   destroyed: boolean;
 }
 
-export type GameStatus = 'START' | 'PLAYING' | 'WON' | 'LOST' | 'LEVEL_UP';
+export type GameStatus = 'START' | 'PLAYING' | 'WON' | 'LOST';
 
 export type Language = 'en' | 'zh';
-
-export interface LevelConfig {
-  number: number;
-  targetScore: number;
-  rocketSpeedMin: number;
-  rocketSpeedMax: number;
-  spawnRate: number;
-}

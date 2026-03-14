@@ -6,10 +6,17 @@ class SoundManager {
 
   private init() {
     if (this.ctx) return;
-    this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.connect(this.ctx.destination);
-    this.masterGain.gain.value = 0.3;
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) {
+        this.ctx = new AudioContextClass();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.connect(this.ctx.destination);
+        this.masterGain.gain.value = 0.3;
+      }
+    } catch (e) {
+      console.error("AudioContext not supported", e);
+    }
   }
 
   private playTone(freq: number, type: OscillatorType, duration: number, volume: number = 1) {
